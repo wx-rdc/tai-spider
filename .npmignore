@@ -1,0 +1,24 @@
+# lcov
+coverage/
+*.log
+.package.json
+
+# artifacts & source
+README.hbs
+output.md
+output/
+test/
+examples/
+hbs/
+src/
+yarn.lock
+
+# dotfiles
+.travis.yml
+.eslintrc
+.eslintignore
+.editorconfig
+.babelrc
+.gitignore
+.git
+.bak
