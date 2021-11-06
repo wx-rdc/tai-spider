@@ -109,12 +109,6 @@ class TaiSpider extends EventEmitter {
 		self.on('_release', function () {
 			log.debug('Queue size: %d', this.queueSize);
 
-			if (self.pipelines) {
-				self.pipelines.forEach(p => {
-					p.close_spider && p.close_spider(self);
-				});
-			}
-
 			if (this.limiters.empty) {
 				setTimeout(function () {
 					if (self.limiters && self.limiters.empty) {
@@ -126,6 +120,11 @@ class TaiSpider extends EventEmitter {
 		});
 
 		self.on('drain', function () {
+			if (self.pipelines) {
+				self.pipelines.forEach(p => {
+					p.close_spider && p.close_spider(self);
+				});
+			}
 			log.info('on drain');
 		});
 	}
@@ -134,8 +133,8 @@ class TaiSpider extends EventEmitter {
 		var self = this;
 
 		switch (property) {
-		case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
-		default: break;
+			case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
+			default: break;
 		}
 	}
 
@@ -287,11 +286,11 @@ class TaiSpider extends EventEmitter {
 			if (err) {
 				err.message = 'Error in preRequest' + (err.message ? ', ' + err.message : err.message);
 				switch (err.op) {
-				case 'retry': log.debug(err.message + ', retry ' + options.uri); self._onContent(err, options); break;
-				case 'fail': log.debug(err.message + ', fail ' + options.uri); options.callback(err, { options: options }, options.release); break;
-				case 'abort': log.debug(err.message + ', abort ' + options.uri); options.release(); break;
-				case 'queue': log.debug(err.message + ', queue ' + options.uri); self.queue(options); options.release(); break;
-				default: log.debug(err.message + ', retry ' + options.uri); self._onContent(err, options); break;
+					case 'retry': log.debug(err.message + ', retry ' + options.uri); self._onContent(err, options); break;
+					case 'fail': log.debug(err.message + ', fail ' + options.uri); options.callback(err, { options: options }, options.release); break;
+					case 'abort': log.debug(err.message + ', abort ' + options.uri); options.release(); break;
+					case 'queue': log.debug(err.message + ', queue ' + options.uri); self.queue(options); options.release(); break;
+					default: log.debug(err.message + ', retry ' + options.uri); self._onContent(err, options); break;
 				}
 				return;
 			}
@@ -331,22 +330,22 @@ class TaiSpider extends EventEmitter {
 
 		if (error) {
 			switch (error.code) {
-			case 'NOHTTP2SUPPORT':
-				//if the enviroment is not support http2 api, all request rely on http2 protocol
-				//are aborted immediately no matter how many retry times left
-				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
-				break;
-			default:
-				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
-				if (options.retries) {
-					setTimeout(function () {
-						options.retries--;
-						self._schedule(options);
-						options.release();
-					}, options.retryTimeout);
-					return;
-				}
-				break;
+				case 'NOHTTP2SUPPORT':
+					//if the enviroment is not support http2 api, all request rely on http2 protocol
+					//are aborted immediately no matter how many retry times left
+					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
+					break;
+				default:
+					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
+					if (options.retries) {
+						setTimeout(function () {
+							options.retries--;
+							self._schedule(options);
+							options.release();
+						}, options.retryTimeout);
+						return;
+					}
+					break;
 			}
 
 			options.callback(error, { options: options }, options.release);

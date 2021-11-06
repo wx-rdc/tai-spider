@@ -1,6 +1,6 @@
 {
   "name": "tai-spider",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Scrapy Framework implemented by nodejs.",
   "main": "./index.js",
   "directories": {
@@ -14,10 +14,12 @@
   "scripts": {
     "cover": "nyc --reporter=lcovonly --reporter=text --reporter=text-summary mocha --timeout=15000 --reporter spec test/*.test.js",
     "build": "babel -d ./lib src",
-    "prepublishOnly": "npm run build",
     "eslint": "eslint ./src ./test",
     "mocha": "mocha",
     "pretest": "npm run build",
+    "git": "git add . && git commit -m",
+    "prepublishOnly": "npm run build",
+    "postgit": "npm version patch && np && git push --all",
     "test": "npm run eslint && istanbul cover ./node_modules/mocha/bin/_mocha"
   },
   "repository": {

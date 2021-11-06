@@ -23,8 +23,8 @@ class ImageWriterPipeline {
 			return hashFn.digest('hex');
 		};
 
-		let filename = item.filename || hash(item.url) + '.' + item.type;
 		if (item instanceof Image) {
+			let filename = item.filename || hash(item.url) + '.' + item.type;
 			fs.createWriteStream(path.join(this.outputDir, filename)).write(item.body);
 		}
 		return item;
