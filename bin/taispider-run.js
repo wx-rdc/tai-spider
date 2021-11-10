@@ -18,7 +18,7 @@ const error = (text) => {
 }
 
 const localCLI = path.join(__dirname, '../src/run.js');
-if (fs.existsSync(localCLI)) {
+if (!process.env.FORCE_LIB && fs.existsSync(localCLI)) {
     debug('Using local install of taispider');
     require(localCLI);
 } else {
