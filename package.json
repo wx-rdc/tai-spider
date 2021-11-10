@@ -37,6 +37,7 @@
     "iconv-lite": "^0.4.8",
     "lodash": "^4.17.10",
     "log4js": "^6.3.0",
+    "mkdirp": "^1.0.4",
     "moment": "^2.29.1",
     "request": "~2.88.0",
     "require-directory": "^2.1.1",

@@ -5,7 +5,7 @@ const _ = require('lodash');
 const Bottleneck = require('bottleneckp');
 const seenreq = require('seenreq');
 const HttpClient = require('./http/client');
-const Request = require('./http/request');
+const { Request, SplashRequest } = require('./http/request');
 const { createResponse } = require('./http/response');
 const log = require('./logger');
 
@@ -32,9 +32,6 @@ class TaiSpider extends EventEmitter {
 	 */
 	constructor(options = {}) {
 		super();
-		if (['onDrain', 'cache'].some(key => key in options)) {
-			throw new Error('Support for "onDrain", "cache" has been removed! For more details, see https://github.com/bda-research/node-crawler');
-		}
 		this.httpClient = new HttpClient();
 		this.init(options);
 	}
@@ -84,6 +81,8 @@ class TaiSpider extends EventEmitter {
 			}
 		});
 
+		self.setLimiterProperty('splash', 'rateLimit', 1000);
+
 		//maintain the http2 sessions
 		self.http2Connections = {};
 
@@ -93,6 +92,9 @@ class TaiSpider extends EventEmitter {
 
 		self.seen = new seenreq(self.options.seenreq);
 		self.seen.initialize().then(() => log.debug('seenreq is initialized.')).catch(e => log.error(e));
+
+		self.splash_seen = new seenreq(self.options.splash_seenreq);
+		self.splash_seen.initialize().then(() => log.debug('splash seenreq is initialized.')).catch(e => log.error(e));
 
 		self.on('_init_start', function () {
 			if (self.options.pipelines && self.options.pipelines.length > 0) {
@@ -129,12 +131,16 @@ class TaiSpider extends EventEmitter {
 		});
 	}
 
+	addPipeline(pipeline) {
+		this.options.pipelines.push(pipeline);
+	}
+
 	setLimiterProperty(limiter, property, value) {
 		var self = this;
 
 		switch (property) {
-			case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
-			default: break;
+		case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
+		default: break;
 		}
 	}
 
@@ -168,7 +174,10 @@ class TaiSpider extends EventEmitter {
 
 		self.globalOnlyOptions.forEach(globalOnlyOption => delete options[globalOnlyOption]);
 
-		self._buildHttpRequest(options);
+		if (options.splash) {
+			self._buildSplashRequest(options);
+		} else
+			self._buildHttpRequest(options);
 	}
 
 	queue(options) {
@@ -185,7 +194,7 @@ class TaiSpider extends EventEmitter {
 				continue;
 			}
 			self._pushToQueue(
-				_.isString(options[i]) ? { uri: options[i] } : options[i]
+				_.isString(options[i]) ? { uri: options[i] } : Object.assign({ uri: options[i].uri || options[i].request.link }, options[i])
 			);
 		}
 	}
@@ -209,11 +218,19 @@ class TaiSpider extends EventEmitter {
 			return;
 		}
 
-		self.seen.exists(options, options.seenreq).then(rst => {
-			if (!rst) {
-				self._schedule(options);
-			}
-		}).catch(e => log.error(e));
+		if (options.splash) {
+			self.splash_seen.exists(options, options.splash_seenreq).then(rst => {
+				if (!rst) {
+					self._schedule(options);
+				}
+			}).catch(e => log.error(e));
+		} else {
+			self.seen.exists(options, options.seenreq).then(rst => {
+				if (!rst) {
+					self._schedule(options);
+				}
+			}).catch(e => log.error(e));
+		}
 	}
 
 	_schedule(options) {
@@ -231,121 +248,40 @@ class TaiSpider extends EventEmitter {
 			}
 
 			if (options.html) {
-				self._onContent(null, options, { body: options.html, headers: { 'content-type': 'text/html' } });
+				self.onContent(null, options, { body: options.html, headers: { 'content-type': 'text/html' } });
 			} else if (typeof options.uri === 'function') {
 				options.uri(function (uri) {
 					options.uri = uri;
-					self._buildHttpRequest(options);
+					options.request.fetch(self, options);
 				});
 			} else {
-				self._buildHttpRequest(options);
+				options.request.fetch(self, options);
 			}
 		});
 
 	}
 
-	_buildHttpRequest(options) {
-		var self = this;
-
-		// log.debug(options.method + ' ' + options.uri);
-		if (options.proxy)
-			log.debug('Use proxy: %s', options.proxy);
-
-		// Cloning keeps the opts parameter clean:
-		// - some versions of "request" apply the second parameter as a
-		// property called "callback" to the first parameter
-		// - keeps the query object fresh in case of a retry
-
-		var ropts = _.assign({}, options);
-
-		if (!ropts.headers) { ropts.headers = {}; }
-		if (ropts.forceUTF8) { ropts.encoding = null; }
-		// specifying json in request will have request sets body to JSON representation of value and
-		// adds Content-type: application/json header. Additionally, parses the response body as JSON
-		// so the response will be JSON object, no need to deal with encoding
-		if (ropts.json) { options.encoding = null; }
-		if (ropts.userAgent) {
-			if (self.options.rotateUA && _.isArray(ropts.userAgent)) {
-				ropts.headers['User-Agent'] = ropts.userAgent[0];
-				// If "rotateUA" is true, rotate User-Agent
-				options.userAgent.push(options.userAgent.shift());
-			} else {
-				ropts.headers['User-Agent'] = ropts.userAgent;
-			}
-		}
-
-		if (ropts.referer) {
-			ropts.headers.Referer = ropts.referer;
-		}
-
-		if (ropts.proxies && ropts.proxies.length) {
-			ropts.proxy = ropts.proxies[0];
-		}
-
-		var doRequest = function (err) {
-			if (err) {
-				err.message = 'Error in preRequest' + (err.message ? ', ' + err.message : err.message);
-				switch (err.op) {
-					case 'retry': log.debug(err.message + ', retry ' + options.uri); self._onContent(err, options); break;
-					case 'fail': log.debug(err.message + ', fail ' + options.uri); options.callback(err, { options: options }, options.release); break;
-					case 'abort': log.debug(err.message + ', abort ' + options.uri); options.release(); break;
-					case 'queue': log.debug(err.message + ', queue ' + options.uri); self.queue(options); options.release(); break;
-					default: log.debug(err.message + ', retry ' + options.uri); self._onContent(err, options); break;
-				}
-				return;
-			}
-
-			if (ropts.skipEventRequest !== true) {
-				self.emit('request', ropts);
-			}
-
-			var requestArgs = ['uri', 'url', 'qs', 'method', 'headers', 'body', 'form', 'formData', 'json', 'multipart', 'followRedirect', 'followAllRedirects', 'maxRedirects', 'removeRefererHeader', 'encoding', 'pool', 'timeout', 'proxy', 'auth', 'oauth', 'strictSSL', 'jar', 'aws', 'gzip', 'time', 'tunnel', 'proxyHeaderWhiteList', 'proxyHeaderExclusiveList', 'localAddress', 'forever', 'agent', 'strictSSL', 'agentOptions', 'agentClass'];
-
-			self.httpClient.request(_.pick.apply(self, [ropts].concat(requestArgs)), function (error, response) {
-				if (error) {
-					return self._onContent(error, options);
-				}
-
-				if (response.statusCode === 308) {
-					process.nextTick(() => {
-						self.queue({ uri: response.headers['location'], callback: options.callback });
-						options.release();
-					});
-					return;
-				}
-
-				self._onContent(error, options, response);
-			});
-		};
-
-		if (options.preRequest && _.isFunction(options.preRequest)) {
-			options.preRequest(ropts, doRequest);
-		} else {
-			doRequest();
-		}
-	}
-
-	_onContent(error, options, response) {
+	onContent(error, options, response) {
 		var self = this;
 
 		if (error) {
 			switch (error.code) {
-				case 'NOHTTP2SUPPORT':
-					//if the enviroment is not support http2 api, all request rely on http2 protocol
-					//are aborted immediately no matter how many retry times left
-					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
-					break;
-				default:
-					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
-					if (options.retries) {
-						setTimeout(function () {
-							options.retries--;
-							self._schedule(options);
-							options.release();
-						}, options.retryTimeout);
-						return;
-					}
-					break;
+			case 'NOHTTP2SUPPORT':
+				//if the enviroment is not support http2 api, all request rely on http2 protocol
+				//are aborted immediately no matter how many retry times left
+				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
+				break;
+			default:
+				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
+				if (options.retries) {
+					setTimeout(function () {
+						options.retries--;
+						self._schedule(options);
+						options.release();
+					}, options.retryTimeout);
+					return;
+				}
+				break;
 			}
 
 			options.callback(error, { options: options }, options.release);
@@ -366,24 +302,43 @@ class TaiSpider extends EventEmitter {
 			// console.log(v);
 			let item = v;
 			if (item instanceof Request) {
-				let curr = Object.assign({}, item.options, {
-					uri: item.link,
+				let curr = Object.assign({}, {
+					request: item,
 					callback: function (err, res, done) {
 						done();
 						if (err) {
 							log.error(err);
 						} else {
-							return item.cb(res);
+							if (item.cb) return item.cb(res);
+							else return self.parse(res);
 						}
 					}
 				});
 				setTimeout(() => {
 					self.queue([curr]);
 				}, 100);
+			} else if (item instanceof SplashRequest) {
+				let curr = Object.assign({}, {
+					limiter: 'splash',
+					splash: true,
+					request: item,
+					callback: function (err, res, done) {
+						done();
+						if (err) {
+							log.error(err);
+						} else {
+							if (item.cb) return item.cb(res);
+							else return self.parse(res);
+						}
+					}
+				});
+				setTimeout(() => {
+					self.queue(curr);
+				}, 100);
 			} else {
 				if (this.pipelines) {
 					this.pipelines.forEach(pipeline => {
-						item = pipeline.process_item(item, this);
+						item = pipeline.process_item(item, this, options.request, taiResponse);
 					});
 				}
 			}

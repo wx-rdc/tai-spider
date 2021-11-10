@@ -3,6 +3,7 @@
 const typeis = require('type-is').is;
 const DefaultResponse = require('./default-response');
 const TextResponse = require('./text-response');
+const JsonResponse = require('./json-response');
 const log = require('../../logger');
 
 function contentType(res) {
@@ -28,7 +29,7 @@ function parseCharset(res) {
 	if (charset)
 		return charset;
 
-	if (!typeis(contentType(res), ['html'])) {
+	if (!typeis(contentType(res), ['html', 'json'])) {
 		log.debug('Charset not detected in response headers, please specify using `incomingEncoding`, use `utf-8` by default');
 		return 'utf-8';
 	}
@@ -45,6 +46,12 @@ const createResponse = (response, options) => {
 	if (typeis(contentType(response), htmlTypes)) {
 		response.charset = options.incomingEncoding || parseCharset(response);
 		return new TextResponse(response, options);
+	}
+
+	var jsonTypes = ['json', 'javascript', 'application/javascript', 'application/json'];
+	if (typeis(contentType(response), jsonTypes)) {
+		response.charset = options.incomingEncoding || parseCharset(response);
+		return new JsonResponse(response, options);
 	}
 
 	return new DefaultResponse(response, options);

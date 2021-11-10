@@ -1,11 +1,4 @@
-'use strict';
-
-class Request {
-
-	constructor(options) {
-		Object.assign(this, options);
-	}
-
-}
-
-module.exports = Request;
+module.exports = {
+	Request: require('./request'),
+	SplashRequest: require('./splash-request'),
+};

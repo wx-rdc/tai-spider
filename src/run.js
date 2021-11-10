@@ -2,6 +2,7 @@ const { program } = require('commander');
 const path = require('path');
 const chalk = require('chalk');
 const requireDirectory = require('require-directory');
+const { Request } = require('./http/request');
 
 /* eslint-disable */
 const debug = (text, ...args) => {
@@ -24,7 +25,7 @@ const runSpider = (spider) => {
 		spider.start_urls.forEach(url => {
 			debug('start url: %s', url);
 			spider.queue([{
-				uri: url,
+				request: new Request({ link: url }),
 				callback: function (err, res, done) {
 					done();
 					if (err) {
@@ -32,7 +33,7 @@ const runSpider = (spider) => {
 					} else {
 						return spider.parse(res);
 					}
-				}
+				},
 			}]);
 		});
 	});
@@ -67,10 +68,10 @@ pkgs.forEach(function (pkg) {
 		debug('run spider: %s', pkg);
 		var pipelines = [];
 		if (options.output)
-			pipelines.push(require('./pipeline/files'));
+			pipelines.push(require('./pipeline/json'));
 		else
 			pipelines.push(require('./pipeline/echo'));
-		pipelines.push(require('./pipeline/image'));
+		pipelines.push(require('./pipeline/store'));
 		let spider = new spiders[pkg]({
 			debug: true,
 			filename: options.output,
