@@ -1,5 +1,6 @@
 'use strict';
 
+const fs = require('fs');
 const { Request, SplashRequest } = require('../request');
 const urljoin = require('../../util/urljoin');
 
@@ -16,8 +17,8 @@ class Response {
 		if (typeof (link) === 'string') {
 			linkUrl = link;
 		} else {
-			linkUrl = link.attribs['href'];
-			linkOptions['anchorText'] = link.children[0].data;
+			linkUrl = link.attr('href');
+			linkOptions['anchorText'] = link.extract();
 		}
 		linkOptions.href = linkUrl;
 		return linkOptions;
@@ -57,6 +58,10 @@ class Response {
 				yield options.extData || {};
 			}
 		});
+	}
+
+	saveHtml() {
+		fs.writeFileSync('test.html', this.body);
 	}
 }
 

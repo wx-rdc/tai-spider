@@ -4,6 +4,7 @@ const EventEmitter = require('events').EventEmitter;
 const _ = require('lodash');
 const Bottleneck = require('bottleneckp');
 const seenreq = require('seenreq');
+const { transformKey } = require('./util/hash');
 const HttpClient = require('./http/client');
 const { Request, SplashRequest } = require('./http/request');
 const { createResponse } = require('./http/response');
@@ -34,6 +35,7 @@ class TaiSpider extends EventEmitter {
 		super();
 		this.httpClient = new HttpClient();
 		this.init(options);
+		this.log = log;
 	}
 
 	/**
@@ -72,7 +74,7 @@ class TaiSpider extends EventEmitter {
 		self.options = checkJQueryNaming(self.options);
 
 		// Don't make these options persist to individual queries
-		self.globalOnlyOptions = ['maxConnections', 'rateLimit', 'priorityRange', 'homogeneous', 'skipDuplicates', 'rotateUA'];
+		self.globalOnlyOptions = ['maxConnections', 'rateLimit', 'priorityRange', 'homogeneous', 'rotateUA'];
 
 		self.limiters = new Bottleneck.Cluster(self.options.maxConnections, self.options.rateLimit, self.options.priorityRange, self.options.priority, self.options.homogeneous);
 		Object.defineProperty(self, 'queueSize', {
@@ -111,10 +113,10 @@ class TaiSpider extends EventEmitter {
 		self.on('_release', function () {
 			log.debug('Queue size: %d', this.queueSize);
 
-			if (this.limiters.empty) {
+			if (self.limiters && this.limiters.empty) {
 				setTimeout(function () {
 					if (self.limiters && self.limiters.empty) {
-						self.httpClient.close();
+						delete self.limiters;
 						return self.emit('drain');
 					}
 				}, 1000);
@@ -127,7 +129,10 @@ class TaiSpider extends EventEmitter {
 					p.close_spider && p.close_spider(self);
 				});
 			}
-			log.info('on drain');
+			self.seen && self.seen.dispose();
+			self.splash_seen && self.splash_seen.dispose();
+			self.httpClient.close();
+			log.debug('on drain');
 		});
 	}
 
@@ -139,8 +144,8 @@ class TaiSpider extends EventEmitter {
 		var self = this;
 
 		switch (property) {
-		case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
-		default: break;
+			case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
+			default: break;
 		}
 	}
 
@@ -212,8 +217,11 @@ class TaiSpider extends EventEmitter {
 		// TODO we are doing this for every _pushToQueue, find a way to avoid this
 		self.globalOnlyOptions.forEach(globalOnlyOption => delete options[globalOnlyOption]);
 
+		const rs = self.seen.normalize(options, options.seenreq);
+		options.reqKey = transformKey(rs.sign);
+
 		// If duplicate skipping is enabled, avoid queueing entirely for URLs we already crawled
-		if (!self.options.skipDuplicates) {
+		if (!self.options.skipDuplicates || !options.skipDuplicates) {
 			self._schedule(options);
 			return;
 		}
@@ -228,6 +236,8 @@ class TaiSpider extends EventEmitter {
 			self.seen.exists(options, options.seenreq).then(rst => {
 				if (!rst) {
 					self._schedule(options);
+				} else {
+					self.emit('_release');
 				}
 			}).catch(e => log.error(e));
 		}
@@ -266,22 +276,22 @@ class TaiSpider extends EventEmitter {
 
 		if (error) {
 			switch (error.code) {
-			case 'NOHTTP2SUPPORT':
-				//if the enviroment is not support http2 api, all request rely on http2 protocol
-				//are aborted immediately no matter how many retry times left
-				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
-				break;
-			default:
-				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
-				if (options.retries) {
-					setTimeout(function () {
-						options.retries--;
-						self._schedule(options);
-						options.release();
-					}, options.retryTimeout);
-					return;
-				}
-				break;
+				case 'NOHTTP2SUPPORT':
+					//if the enviroment is not support http2 api, all request rely on http2 protocol
+					//are aborted immediately no matter how many retry times left
+					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
+					break;
+				default:
+					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
+					if (options.retries) {
+						setTimeout(function () {
+							options.retries--;
+							self._schedule(options);
+							options.release();
+						}, options.retryTimeout);
+						return;
+					}
+					break;
 			}
 
 			options.callback(error, { options: options }, options.release);
@@ -291,7 +301,7 @@ class TaiSpider extends EventEmitter {
 
 		if (!response.body) { response.body = ''; }
 
-		log.debug('Got ' + (options.uri || 'html') + ' (' + response.body.length + ' bytes)...');
+		log.debug('Got [' + options.reqKey + '] ' + (options.uri || 'html') + ' (' + response.body.length + ' bytes)...');
 
 		const taiResponse = createResponse(response, options);
 		if (options.method === 'HEAD' || !options.jQuery) {
@@ -309,8 +319,8 @@ class TaiSpider extends EventEmitter {
 						if (err) {
 							log.error(err);
 						} else {
-							if (item.cb) return item.cb(res);
-							else return self.parse(res);
+							if (item.cb) return item.cb(res, self);
+							else return self.parse(res, self);
 						}
 					}
 				});
@@ -327,8 +337,8 @@ class TaiSpider extends EventEmitter {
 						if (err) {
 							log.error(err);
 						} else {
-							if (item.cb) return item.cb(res);
-							else return self.parse(res);
+							if (item.cb) return item.cb(res, self);
+							else return self.parse(res, self);
 						}
 					}
 				});
@@ -337,8 +347,8 @@ class TaiSpider extends EventEmitter {
 				}, 100);
 			} else {
 				if (this.pipelines) {
-					this.pipelines.forEach(pipeline => {
-						item = pipeline.process_item(item, this, options.request, taiResponse);
+					this.pipelines.forEach(async (pipeline) => {
+						item = await pipeline.process_item(item, self, options, taiResponse);
 					});
 				}
 			}

@@ -1,7 +1,5 @@
 'use strict';
 
-const _ = require('lodash');
-
 const $fields = Symbol('fields');
 
 class Item {
@@ -10,9 +8,9 @@ class Item {
 			type: 'string',
 			process: (node, type) => {
 				if (type === 'string')
-					return _.trim(node.text());
+					return node.extract_first();
 				else if (type === 'date')
-					return new Date(_.trim(node.text()));
+					return new Date(node.extract_first());
 			},
 		};
 		this[$fields] = {};

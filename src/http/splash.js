@@ -23,7 +23,7 @@ const splash = {
 				if (!error && response.statusCode == 200) {
 					resolve(response.body);
 				} else {
-					reject(response.statusCode + ': ' + response.statusMessage);
+					reject(error);
 				}
 			});
 		});

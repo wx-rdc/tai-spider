@@ -4,21 +4,25 @@ const http2 = require('http2');
 const qs = require('querystring');
 const log = require('../logger');
 
-const http2Request = {
-	_generateHttp2RequestLine: (options) => {
+class Http2Request {
+	constructor() {
+		this.http2Connections = {}
+	}
+
+	_generateHttp2RequestLine(options) {
 		const urlObj = new URL(options.uri);
 
 		const requestLine = {
 			':method': options.method || 'GET',
-			':path': urlObj.pathname,
+			':path': urlObj.pathname + (urlObj.search || ''),
 			':scheme': urlObj.protocol.replace(':', ''),
 			':authority': urlObj.hostname
 		};
 
 		return requestLine;
-	},
+	}
 
-	_generateHttp2RequestBody: (options) => {
+	_generateHttp2RequestBody(options) {
 		let data = null;
 		if (options.form) {
 			if (!/^application\/x-www-form-urlencoded\b/.test(options.headers['content-type'])) {
@@ -39,9 +43,9 @@ const http2Request = {
 
 		//NOTE  the default situation do nothing to the
 		return data;
-	},
+	}
 
-	_buildHttp2Session: (targetHost) => {
+	_buildHttp2Session(targetHost) {
 
 		const newHttp2Connection = http2.connect(targetHost);
 
@@ -58,34 +62,40 @@ const http2Request = {
 		});
 
 		return newHttp2Connection;
-	},
+	}
 
-	_clearHttp2Session() {
+	clearHttp2Session() {
 		log.debug(`Crawler clear all ${Object.keys(this.http2Connections).length} http2 connections`);
 		Object.keys(this.http2Connections).forEach(hostName => {
 			this._closeAndDeleteHttp2Session(hostName);
-			log.debug(`http2 connection to ${hostName} closed`);
 		});
-	},
+	}
 
 	_closeAndDeleteHttp2Session(targetHost) {
 		if (this.http2Connections[targetHost]) {
 			this.http2Connections[targetHost].close();
 			delete this.http2Connections[targetHost];
 		}
-	},
+	}
 
-	request: (options, cb) => {
+	getHttp2Session(targetHost) {
+		if (Object.keys(this.http2Connections).indexOf(targetHost) < 0) {
+			this.http2Connections[targetHost] = this._buildHttp2Session(targetHost);
+		}
+		return this.http2Connections[targetHost];
+	}
+
+	request(options, cb) {
 		const targetHost = new URL(options.uri).origin;
-		options.headers = Object.assign(options.headers, http2Request._generateHttp2RequestLine(options));
-		const requestBody = options.headers[':method'] === 'GET' ? null : http2Request._generateHttp2RequestBody(options);
+		options.headers = Object.assign(options.headers, this._generateHttp2RequestLine(options));
+		const requestBody = options.headers[':method'] === 'GET' ? null : this._generateHttp2RequestBody(options);
 		const response = {
 			headers: {}
 		};
 		const chunks = [];
 		let http2Error = null;
 
-		let http2Session = options.http2Session || http2Request._buildHttp2Session(targetHost);
+		let http2Session = options.http2Session || this.getHttp2Session(targetHost);
 		options.http2Session = http2Session;
 
 		let req = null;
@@ -148,5 +158,7 @@ const http2Request = {
 		req.end(requestBody);
 	}
 };
+
+const http2Request = new Http2Request();
 
 module.exports = http2Request;

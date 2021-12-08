@@ -25,6 +25,7 @@ const runSpider = (spider) => {
 		spider.start_urls.forEach(url => {
 			debug('start url: %s', url);
 			spider.queue([{
+				skipDuplicates: false,
 				request: new Request({ link: url }),
 				callback: function (err, res, done) {
 					done();
@@ -59,25 +60,28 @@ if (!pkgs.length) {
 }
 
 const options = program.opts();
-if (options.output) console.log('  output: %s', options.output);
+if (options.output) debug('  output: %s', options.output);
+
+const defaultOptions = require(path.join(process.cwd(), 'config', 'default.js'))();
+debug('Default options: ', defaultOptions);
 
 var spiders = requireDirectory(module, path.join(process.cwd(), 'spider'));
 
 pkgs.forEach(function (pkg) {
 	if (pkg in spiders) {
-		debug('run spider: %s', pkg);
+		debug('run spider: ', pkg);
 		var pipelines = [];
 		if (options.output)
 			pipelines.push(require('./pipeline/json'));
 		else
 			pipelines.push(require('./pipeline/echo'));
 		pipelines.push(require('./pipeline/store'));
-		let spider = new spiders[pkg]({
+		let spider = new spiders[pkg](Object.assign({
 			debug: true,
 			filename: options.output,
 			pipelines,
-		});
+		}, defaultOptions));
 		runSpider(spider);
 	} else
-		error('Not found spider %s', pkg);
+		error('Not found spider ', pkg);
 });

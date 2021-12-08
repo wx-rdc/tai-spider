@@ -2,7 +2,9 @@
 
 const iconvLite = require('iconv-lite');
 const cheerio = require('cheerio');
+const extractor = require('unfluff');
 const Response = require('./response');
+const ItemNodes = require('../item-node');
 
 class TextResponse extends Response {
 
@@ -37,8 +39,12 @@ class TextResponse extends Response {
 		this.body = this.body.toString();
 	}
 
-	css(path, root) {
-		return this.$(path, root);
+	css(path) {
+		return new ItemNodes(this.$(path), this.$);
+	}
+
+	extract() {
+		return extractor(this.body);
 	}
 
 }

@@ -14,13 +14,13 @@
   "scripts": {
     "cover": "nyc --reporter=lcovonly --reporter=text --reporter=text-summary mocha --timeout=15000 --reporter spec test/*.test.js",
     "build": "babel -d ./lib src",
-    "eslint": "eslint ./src ./test",
+    "eslint": "eslint --fix ./src ./test",
     "mocha": "mocha",
     "pretest": "npm run build",
     "git": "git add . && git commit -m",
     "prepublishOnly": "npm run build",
     "postgit": "npm version patch && np && git push --all",
-    "test": "npm run eslint && istanbul cover ./node_modules/mocha/bin/_mocha"
+    "test": "npm run eslint && npm run mocha"
   },
   "repository": {
     "type": "git",
@@ -42,7 +42,9 @@
     "request": "~2.88.0",
     "require-directory": "^2.1.1",
     "seenreq": "^3.0.0",
+    "seenreq-repo-redis": "^1.0.1",
     "type-is": "^1.6.14",
+    "unfluff": "^3.2.0",
     "url-parse": "^1.5.3"
   },
   "devDependencies": {

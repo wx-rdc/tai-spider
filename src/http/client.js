@@ -14,7 +14,6 @@ class HttpClient {
 		this[$hosts] = {};
 	}
 
-
 	request(options, cb) {
 
 		if (/^\/\//.test(options.uri)) {
@@ -75,22 +74,23 @@ class HttpClient {
 	}
 
 	close() {
-		Object.keys(this[$hosts]).forEach(host => {
-			let option = this[$hosts][host];
-			if (option.http2Session) {
-				option.http2Session.close();
-				delete option.http2Session;
-			}
-		});
+		http2.clearHttp2Session();
+		// Object.keys(this[$hosts]).forEach(host => {
+		// 	let option = this[$hosts][host];
+		// 	if (option.http2Session) {
+		// 		option.http2Session.close();
+		// 		delete option.http2Session;
+		// 	}
+		// });
 	}
 
 	_makeHttp2Request(options, cb) {
 		// log.debug('use http2');
-		const urlObj = new URL(options.uri);
-		let http2Option = this[$hosts][urlObj.hostname];
-		options.http2Session = http2Option.http2Session;
+		// const urlObj = new URL(options.uri);
+		// let http2Option = this[$hosts][urlObj.hostname];
+		// options.http2Session = http2Option.http2Session;
 		http2.request(options, cb);
-		http2Option.http2Session = options.http2Session;
+		// http2Option.http2Session = options.http2Session;
 	}
 
 	_makeHttpRequest(options, cb) {

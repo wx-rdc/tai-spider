@@ -2,11 +2,12 @@ module.exports = {
     "env": {
         "es6": true,
         "node": true,
-		"mocha": true
+        "mocha": true
     },
     "extends": "eslint:recommended",
     "parserOptions": {
-        "sourceType": "module"
+        "sourceType": "module",
+        "ecmaVersion": 8,
     },
     "rules": {
         "indent": [
@@ -25,8 +26,8 @@ module.exports = {
             "error",
             "always"
         ],
-		"no-console":[
-			"off"
-		]
+        "no-console": [
+            "off"
+        ]
     }
 };
