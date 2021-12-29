@@ -1,6 +1,7 @@
 'use strict';
 
 const _ = require('lodash');
+const setCookie = require('set-cookie-parser');
 const log = require('../../logger');
 
 class Request {
@@ -19,7 +20,7 @@ class Request {
 		// property called "callback" to the first parameter
 		// - keeps the query object fresh in case of a retry
 
-		var ropts = _.assign({}, options);
+		var ropts = _.assign(options, this);
 
 		if (!ropts.headers) { ropts.headers = {}; }
 		if (ropts.forceUTF8) { ropts.encoding = null; }
@@ -81,6 +82,12 @@ class Request {
 					return;
 				}
 
+				response.cookies = setCookie.parse(response);
+
+				if (options.noContent) {
+					return options.callback(error, response, () => { });
+				}
+
 				spider.onContent(error, options, response);
 			});
 		};
@@ -95,3 +102,25 @@ class Request {
 }
 
 module.exports = Request;
+
+// fetch("https://www.space-track.org/auth/login", {
+// 	"headers": {
+// 		"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
+// 		"accept-language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+// 		"cache-control": "max-age=0",
+// 		"content-type": "application/x-www-form-urlencoded",
+// 		"sec-ch-ua": "\" Not A;Brand\";v=\"99\", \"Chromium\";v=\"96\", \"Google Chrome\";v=\"96\"",
+// 		"sec-ch-ua-mobile": "?0",
+// 		"sec-ch-ua-platform": "\"Linux\"",
+// 		"sec-fetch-dest": "document",
+// 		"sec-fetch-mode": "navigate",
+// 		"sec-fetch-site": "same-origin",
+// 		"sec-fetch-user": "?1",
+// 		"upgrade-insecure-requests": "1",
+// 		"cookie": "chocolatechip=gtilsonqbi3fs1gdgvkdcrnghcotsvot; spacetrack_csrf_cookie=4ccefa89635e69eff80774aa7746b8e2",
+// 		"Referer": "https://www.space-track.org/auth/login",
+// 		"Referrer-Policy": "strict-origin-when-cross-origin"
+// 	},
+// 	"body": "spacetrack_csrf_token=4ccefa89635e69eff80774aa7746b8e2&identity=ximig&password=Kong059Kong059Kong059&btnLogin=LOGIN",
+// 	"method": "POST"
+// });

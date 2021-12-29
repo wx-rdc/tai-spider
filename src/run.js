@@ -2,7 +2,7 @@ const { program } = require('commander');
 const path = require('path');
 const chalk = require('chalk');
 const requireDirectory = require('require-directory');
-const { Request } = require('./http/request');
+const { Request, SplashRequest } = require('./http/request');
 
 /* eslint-disable */
 const debug = (text, ...args) => {
@@ -22,22 +22,50 @@ const runSpider = (spider) => {
 	let init_flag = false;
 	spider.on('_init_finished', function () {
 		init_flag = true;
-		spider.start_urls.forEach(url => {
-			debug('start url: %s', url);
-			spider.queue([{
-				skipDuplicates: false,
-				request: new Request({ link: url }),
-				callback: function (err, res, done) {
-					done();
-					if (err) {
-						error(err);
-					} else {
-						return spider.parse(res);
-					}
-				},
-			}]);
+
+		let start_urls = [];
+		if (typeof spider.start_urls === 'function')
+			start_urls = spider.start_urls();
+		else
+			start_urls = spider.start_urls;
+		start_urls.forEach(url => {
+			if (typeof url === 'string') {
+				debug('start url: %s', url);
+				const { headers = {} } = spider;
+				spider.processRequest(
+					new Request({
+						link: url,
+						headers,
+						skipDuplicates: false,
+						direct: true,
+					}),
+					spider
+				);
+			} else if (typeof url === 'object') {
+				let options = url;
+				let request = options.splash ? SplashRequest : Request;
+				spider.processItem(new request(options), spider);
+			} else {
+				error('unknow url type, exist with error');
+				process.exit(1);
+			}
+			// spider.queue([{
+			// 	skipDuplicates: false,
+			// 	request: new Request({ link: url, headers }),
+			// 	callback: function (err, res, done) {
+			// 		done();
+			// 		if (err) {
+			// 			spider.errorHandle(err);
+			// 		} else {
+			// 			spider.clearErrors();
+			// 			return spider.parse(res);
+			// 		}
+			// 	},
+			// }]);
 		});
 	});
+
+	// start init
 	spider.emit('_init_start');
 	setTimeout(() => {
 		if (!init_flag) {
@@ -71,13 +99,20 @@ pkgs.forEach(function (pkg) {
 	if (pkg in spiders) {
 		debug('run spider: ', pkg);
 		var pipelines = [];
-		if (options.output)
-			pipelines.push(require('./pipeline/json'));
-		else
-			pipelines.push(require('./pipeline/echo'));
+
+		// json line output enabled
+		var jl = false;
+		if (options.output) {
+			jl = true;
+		}
+
 		pipelines.push(require('./pipeline/store'));
+		pipelines.push(require('./pipeline/json'));
+		pipelines.push(require('./pipeline/echo'));
+
 		let spider = new spiders[pkg](Object.assign({
 			debug: true,
+			jl,
 			filename: options.output,
 			pipelines,
 		}, defaultOptions));

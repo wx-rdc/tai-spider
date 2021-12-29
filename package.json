@@ -19,7 +19,7 @@
     "pretest": "npm run build",
     "git": "git add . && git commit -m",
     "prepublishOnly": "npm run build",
-    "postgit": "npm version patch && np && git push --all",
+    "postgit": "npm version patch && git push --all",
     "test": "npm run eslint && npm run mocha"
   },
   "repository": {
@@ -43,6 +43,7 @@
     "require-directory": "^2.1.1",
     "seenreq": "^3.0.0",
     "seenreq-repo-redis": "^1.0.1",
+    "set-cookie-parser": "^2.4.8",
     "type-is": "^1.6.14",
     "unfluff": "^3.2.0",
     "url-parse": "^1.5.3"

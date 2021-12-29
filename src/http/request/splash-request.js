@@ -1,8 +1,5 @@
 'use strict';
 
-const fs = require('fs');
-const mkdirp = require('mkdirp');
-const path = require('path');
 var crypto = require('crypto');
 const _ = require('lodash');
 const splash = require('../splash');
@@ -33,17 +30,10 @@ class SplashRequest {
 
 	fetch(spider, options) {
 		var self = spider;
-		var outputDir = self.envs['CAPTURE_STORE'];
 		var splashServer = self.envs['SPLASH_SERVER'];
 
 		if (!splashServer)
 			throw new Error('Please set SPLASH_SERVER first!');
-
-		if (!fs.existsSync(outputDir)) {
-			try {
-				mkdirp.sync(outputDir);
-			} catch (error) { /* eslint-disable no-empty */ }
-		}
 
 		// log.debug(options.method + ' ' + options.uri);
 		if (options.proxy)
@@ -80,25 +70,17 @@ class SplashRequest {
 				self.emit('request', ropts);
 			}
 
-			const { filename, link, cb } = options.request;
+			const { link } = options.request;
 			const rest = _.omit(options.request, 'filename', 'link', 'cb');
 
 			log.debug('capture %s', link);
 
 			splash.capture(link, Object.assign({}, rest, {
 				splash_server: splashServer,
-			})).then(body => {
-				fs.createWriteStream(path.join(outputDir, filename)).write(body);
-				// return self._onContent(error, options, response);
-				options.release();
-				if (cb) cb({
-					link,
-					filename
-				});
+			})).then(response => {
+				self.onContent(null, options, response);
 			}).catch(error => {
-				// return self._onContent(error, options);
-				log.error(error);
-				options.release();
+				self.onContent(error, options);
 			});
 		};
 

@@ -21,7 +21,7 @@ const splash = {
 				encoding: null,
 			}, function (error, response) {
 				if (!error && response.statusCode == 200) {
-					resolve(response.body);
+					resolve(response);
 				} else {
 					reject(error);
 				}

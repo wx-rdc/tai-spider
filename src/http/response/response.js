@@ -1,8 +1,10 @@
 'use strict';
 
 const fs = require('fs');
+const _ = require('lodash');
 const { Request, SplashRequest } = require('../request');
 const urljoin = require('../../util/urljoin');
+const ItemNodes = require('../node/items');
 
 class Response {
 
@@ -24,44 +26,62 @@ class Response {
 		return linkOptions;
 	}
 
+	getUri() {
+		return this.options.uri;
+	}
+
+	from_request(options) {
+		let request = options.splash ? SplashRequest : Request;
+		return new request(options);
+	}
+
 	follow_all(links, cb, options) {
 		return links.map((idx, link) => this.follow(link, cb, options));
 	}
 
-	follow(link, cb, options) {
-		let linkOptions = this._parse_link(link);
-		return new Request({
+	follow(link, cb, options = {}) {
+		let singleLink = link instanceof ItemNodes ? link.get(0) : link;
+		if (!singleLink) return {};
+		let linkOptions = this._parse_link(singleLink);
+		let request = options.splash ? SplashRequest : Request;
+		return new request(Object.assign({
 			link: urljoin(this.options.uri, linkOptions.href),
-			options: Object.assign(linkOptions, options || {}),
-			cb
-		});
+			cb,
+		}, _.merge({
+			options: linkOptions,
+		}, options))
+		);
 	}
 
-	capture_all(links, options) {
-		return links.map((idx, link) => this.capture(link, options));
+	absolute_url(url) {
+		return urljoin(this.options.uri, url);
 	}
 
-	capture(link, options) {
-		let linkOptions = this._parse_link(link);
-		return new SplashRequest(Object.assign(linkOptions, options || {}, {
-			link: urljoin(this.options.uri, linkOptions.href),
-		}));
-	}
+	// capture_all(links, options) {
+	// 	return links.map((idx, link) => this.capture(link, options));
+	// }
 
-	download(link, options) {
-		let linkOptions = this._parse_link(link);
-		return new Request({
-			download: true,
-			link: urljoin(this.options.uri, linkOptions.href),
-			options: Object.assign(linkOptions, options || {}),
-			cb: function* () {
-				yield options.extData || {};
-			}
-		});
-	}
+	// capture(link, options) {
+	// 	let linkOptions = this._parse_link(link);
+	// 	return new SplashRequest(Object.assign(linkOptions, options || {}, {
+	// 		link: urljoin(this.options.uri, linkOptions.href),
+	// 	}));
+	// }
 
-	saveHtml() {
-		fs.writeFileSync('test.html', this.body);
+	// download(link, options) {
+	// 	let linkOptions = this._parse_link(link);
+	// 	return new Request({
+	// 		download: true,
+	// 		link: urljoin(this.options.uri, linkOptions.href),
+	// 		options: Object.assign(linkOptions, options || {}),
+	// 		cb: function* () {
+	// 			yield options.extData || {};
+	// 		}
+	// 	});
+	// }
+
+	saveBody(filename) {
+		fs.writeFileSync(filename, this.body);
 	}
 }
 

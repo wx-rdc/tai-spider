@@ -25,18 +25,16 @@ describe('Cache features tests', function () {
 				pipelines: []
 			});
 
-			c.queue([{
+			c.processRequest(new Request({
 				skipDuplicates: false,
-				request: new Request({ link: httpTarget }),
-				callback: function (error, result, cb) {
-					cb();
-					expect(error).to.be.null;
+				link: httpTarget,
+				cb: function (result) {
 					expect(result.statusCode).to.equal(200);
 					expect(call.isDone()).to.be.true;
 					done();
 					return [];
 				},
-			}]);
+			}), c);
 		});
 
 		it('should notify the callback when an error occurs and "retries" is disabled', function (done) {
@@ -47,6 +45,7 @@ describe('Cache features tests', function () {
 			});
 
 			c.queue([{
+				uri: httpTarget,
 				request: new Request({ link: httpTarget }),
 				callback: function (error, result, cb) {
 					cb();
@@ -68,6 +67,7 @@ describe('Cache features tests', function () {
 			});
 
 			c.queue([{
+				uri: httpTarget,
 				request: new Request({ link: httpTarget }),
 				callback: function (error, result, cb) {
 					cb();

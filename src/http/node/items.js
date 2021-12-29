@@ -1,6 +1,7 @@
 'use strict';
 
 const _ = require('lodash');
+const Plugins = require('./plugin');
 
 class ItemNode {
 	constructor(node, $) {
@@ -18,6 +19,21 @@ class ItemNode {
 
 	css(selector) {
 		return new ItemNodes(this.$(selector, this.node), this.$);
+	}
+
+	next(selector) {
+		let nodes = this.$(this.node).nextAll(selector);
+		if (nodes && nodes.length > 0)
+			return new ItemNode(nodes[0], this.$);
+		return null;
+	}
+
+	html() {
+		return this.$(this.node).html();
+	}
+
+	parseTable(fnMap) {
+		return (new Plugins.TableParser(this.node, this.$)).parse(fnMap);
 	}
 }
 

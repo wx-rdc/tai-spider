@@ -20,15 +20,20 @@ class HttpClient {
 			options.uri = 'https:' + options.uri;
 		}
 
-		this._detectALPNProtocol(options.uri).then(alpnProtocol => {
-			if (alpnProtocol === 'h2') {
-				// use http2
-				this._makeHttp2Request(options, cb);
-			} else {
-				// use http 1.1
-				this._makeHttpRequest(options, cb);
-			}
-		});
+		if (!options.http2 || options.proxy || options.uri.startsWith('http:')) {
+			// force use http 1.1
+			this._makeHttpRequest(options, cb);
+		} else {
+			this._detectALPNProtocol(options.uri).then(alpnProtocol => {
+				if (alpnProtocol === 'h2') {
+					// use http2
+					this._makeHttp2Request(options, cb);
+				} else {
+					// use http 1.1
+					this._makeHttpRequest(options, cb);
+				}
+			});
+		}
 	}
 
 	_initializeTLSOptions(servername) {
@@ -45,10 +50,6 @@ class HttpClient {
 		return new Promise((resolve, reject) => {
 			try {
 				const urlObj = new URL(uri);
-				if (urlObj.protocol === 'http:') {
-					resolve('http/1.1');
-					return;
-				}
 
 				if (urlObj.hostname in self[$hosts]) {
 					resolve(self[$hosts][urlObj.hostname].protocol);
@@ -89,7 +90,16 @@ class HttpClient {
 		// const urlObj = new URL(options.uri);
 		// let http2Option = this[$hosts][urlObj.hostname];
 		// options.http2Session = http2Option.http2Session;
-		http2.request(options, cb);
+		let self = this;
+		http2.request(options, (error, response) => {
+			if (response.statusCode === 301) {
+				self._makeHttp2Request(Object.assign(options, {
+					uri: response.headers['location']
+				}), cb);
+			} else {
+				cb(error, response);
+			}
+		});
 		// http2Option.http2Session = options.http2Session;
 	}
 

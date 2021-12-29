@@ -4,7 +4,7 @@ const iconvLite = require('iconv-lite');
 const cheerio = require('cheerio');
 const extractor = require('unfluff');
 const Response = require('./response');
-const ItemNodes = require('../item-node');
+const ItemNodes = require('../node/items');
 
 class TextResponse extends Response {
 
@@ -23,9 +23,9 @@ class TextResponse extends Response {
 	}
 
 	_doEncoding(options) {
-		if (options.encoding === null) {
-			return;
-		}
+		// if (options.encoding === null) {
+		// 	return;
+		// }
 
 		if (options.forceUTF8) {
 			var charset = this.charset;

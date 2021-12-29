@@ -5,16 +5,20 @@ const fs = require('fs');
 class JsonWriterPipeline {
 
 	open_spider(spider) {
-		this.file = fs.createWriteStream(spider.options.filename);
+		if (spider.options.jl)
+			this.file = fs.createWriteStream(spider.options.filename);
 	}
 
 	close_spider(/* eslint-disable no-unused-vars */ spider) {
-		this.file.end();
+		if (spider.options.jl && this.file)
+			this.file.end();
 	}
 
 	process_item(item, /* eslint-disable no-unused-vars */ spider) {
-		let line = JSON.stringify(item) + '\n';
-		this.file.write(line);
+		if (spider.options.jl && this.file) {
+			let line = JSON.stringify(item) + '\n';
+			this.file.write(line);
+		}
 		return item;
 	}
 }

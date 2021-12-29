@@ -6,7 +6,7 @@ const path = require('path');
 class StorePipeline {
 
 	open_spider(spider) {
-		this.outputDir = spider.envs['FILE_STORE'];
+		this.outputDir = spider.options.store.path;
 		if (this.outputDir) {
 			try {
 				fs.mkdirSync(this.outputDir);
@@ -19,18 +19,24 @@ class StorePipeline {
 		const { reqKey, request } = options;
 
 		if (request && request.download) {
-			let options = request.options;
-			let filename = options.filename || reqKey + '.' + options.type;
-			log.debug('write to ', filename);
-			fs.createWriteStream(path.join(this.outputDir, filename)).write(response.body);
+			let options = request.options || {};
+			const { filename = reqKey, type = 'dat' } = options;
+			let fullname = filename + '.' + type;
+			log.debug('write to ', fullname);
+			fs.createWriteStream(path.join(this.outputDir, fullname)).write(response.body);
 			if (options.cb)
-				item = Object.assign(item, options.cb(filename));
-			else
+				item = Object.assign(item, options.cb(fullname));
+			else {
 				item = Object.assign(item, {
 					file: {
-						name: filename,
+						ref: response.options.uri,
+						basename: filename,
+						type,
+						size: response.body.length,
+						fullpath: path.resolve(this.outputDir, fullname)
 					}
 				});
+			}
 		}
 		return item;
 	}

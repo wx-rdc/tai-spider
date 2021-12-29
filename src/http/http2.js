@@ -6,7 +6,7 @@ const log = require('../logger');
 
 class Http2Request {
 	constructor() {
-		this.http2Connections = {}
+		this.http2Connections = {};
 	}
 
 	_generateHttp2RequestLine(options) {
@@ -157,7 +157,7 @@ class Http2Request {
 		//set request body
 		req.end(requestBody);
 	}
-};
+}
 
 const http2Request = new Http2Request();
 

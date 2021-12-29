@@ -59,12 +59,13 @@ class TaiSpider extends EventEmitter {
 			rateLimit: 0,
 			referer: false,
 			retries: 3,
-			retryTimeout: 10000,
+			retryTimeout: 1000,
 			timeout: 15000,
 			skipDuplicates: true,
 			rotateUA: false,
 			homogeneous: false,
-			http2: false
+			http2: false,
+			maxErrors: 3,
 		};
 
 		// return defaultOptions with overridden properties from options.
@@ -84,6 +85,9 @@ class TaiSpider extends EventEmitter {
 		});
 
 		self.setLimiterProperty('splash', 'rateLimit', 1000);
+
+		// error count
+		self.errorCount = 0;
 
 		//maintain the http2 sessions
 		self.http2Connections = {};
@@ -133,6 +137,10 @@ class TaiSpider extends EventEmitter {
 			self.splash_seen && self.splash_seen.dispose();
 			self.httpClient.close();
 			log.debug('on drain');
+			if (self.errorCount > 0) {
+				log.error('exit with error');
+				process.exit(1);
+			}
 		});
 	}
 
@@ -144,8 +152,8 @@ class TaiSpider extends EventEmitter {
 		var self = this;
 
 		switch (property) {
-			case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
-			default: break;
+		case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
+		default: break;
 		}
 	}
 
@@ -179,10 +187,10 @@ class TaiSpider extends EventEmitter {
 
 		self.globalOnlyOptions.forEach(globalOnlyOption => delete options[globalOnlyOption]);
 
-		if (options.splash) {
-			self._buildSplashRequest(options);
-		} else
-			self._buildHttpRequest(options);
+		options.reqKey = transformKey(options.uri);
+
+		options.release = function () { /* empty function */ };
+		options.request.fetch(self, options);
 	}
 
 	queue(options) {
@@ -199,7 +207,7 @@ class TaiSpider extends EventEmitter {
 				continue;
 			}
 			self._pushToQueue(
-				_.isString(options[i]) ? { uri: options[i] } : Object.assign({ uri: options[i].uri || options[i].request.link }, options[i])
+				_.isString(options[i]) ? { uri: options[i] } : options[i]
 			);
 		}
 	}
@@ -271,27 +279,119 @@ class TaiSpider extends EventEmitter {
 
 	}
 
+	errorHandle(error) {
+		this.errorCount++;
+		log.debug('error count: ', this.errorCount, error);
+		if (this.errorCount > this.options.maxErrors) {
+			log.error('max errors reached, exit with error!');
+			process.exit(1);
+		}
+		this.emit('_release');
+	}
+
+	clearErrors() {
+		this.errorCount = 0;
+	}
+
+	processRequest(item, self) {
+		const { skipDuplicates = true, direct = false, link: uri } = item;
+		let curr = Object.assign({}, {
+			uri,
+			skipDuplicates,
+			request: item,
+			callback: function (err, res, done) {
+				try {
+					done();
+					if (err) {
+						self.errorHandle(err);
+					} else {
+						self.clearErrors();
+						if (item.cb) return item.cb.bind(self)(res, self);
+						else return self.parse.bind(self)(res, self);
+					}
+				} catch (error) {
+					self.errorHandle(error);
+				}
+			}
+		});
+		setTimeout(() => {
+			if (direct)
+				self.direct(curr);
+			else
+				self.queue([curr]);
+		}, 100);
+	}
+
+	processSplashRequest(item, self) {
+		const { skipDuplicates = true, direct = false, link: uri } = item;
+		let curr = Object.assign({}, {
+			limiter: 'splash',
+			splash: true,
+			uri,
+			skipDuplicates,
+			request: item,
+			callback: function (err, res, done) {
+				try {
+					done();
+					if (err) {
+						self.errorHandle(err);
+					} else {
+						self.clearErrors();
+						if (item.cb) return item.cb.bind(self)(res, self);
+						else return self.parse.bind(self)(res, self);
+					}
+				} catch (error) {
+					self.errorHandle(error);
+				}
+			}
+		});
+		setTimeout(() => {
+			if (direct)
+				self.direct(curr);
+			else
+				self.queue([curr]);
+		}, 100);
+	}
+
+	processItem(item, self, options, taiResponse) {
+		try {
+			if (item instanceof Request) {
+				self.processRequest(item, self);
+			} else if (item instanceof SplashRequest) {
+				self.processSplashRequest(item, self);
+			} else {
+				if (self.pipelines) {
+					self.pipelines.forEach(async (pipeline) => {
+						item = await pipeline.process_item(item, self, options, taiResponse);
+					});
+				}
+			}
+		} catch (error) {
+			self.errorHandle(error);
+		}
+	}
+
 	onContent(error, options, response) {
 		var self = this;
 
 		if (error) {
 			switch (error.code) {
-				case 'NOHTTP2SUPPORT':
-					//if the enviroment is not support http2 api, all request rely on http2 protocol
-					//are aborted immediately no matter how many retry times left
-					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
-					break;
-				default:
-					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
-					if (options.retries) {
-						setTimeout(function () {
-							options.retries--;
-							self._schedule(options);
-							options.release();
-						}, options.retryTimeout);
-						return;
-					}
-					break;
+			case 'NOHTTP2SUPPORT':
+				//if the enviroment is not support http2 api, all request rely on http2 protocol
+				//are aborted immediately no matter how many retry times left
+				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
+				break;
+			default:
+				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
+				if (options.retries) {
+					setTimeout(function () {
+						options.retries--;
+						self._schedule(options);
+						options.release();
+					}, options.retryTimeout);
+					return;
+				}
+				break;
 			}
 
 			options.callback(error, { options: options }, options.release);
@@ -311,47 +411,7 @@ class TaiSpider extends EventEmitter {
 		for (let v of options.callback(null, taiResponse, options.release)) {
 			// console.log(v);
 			let item = v;
-			if (item instanceof Request) {
-				let curr = Object.assign({}, {
-					request: item,
-					callback: function (err, res, done) {
-						done();
-						if (err) {
-							log.error(err);
-						} else {
-							if (item.cb) return item.cb(res, self);
-							else return self.parse(res, self);
-						}
-					}
-				});
-				setTimeout(() => {
-					self.queue([curr]);
-				}, 100);
-			} else if (item instanceof SplashRequest) {
-				let curr = Object.assign({}, {
-					limiter: 'splash',
-					splash: true,
-					request: item,
-					callback: function (err, res, done) {
-						done();
-						if (err) {
-							log.error(err);
-						} else {
-							if (item.cb) return item.cb(res, self);
-							else return self.parse(res, self);
-						}
-					}
-				});
-				setTimeout(() => {
-					self.queue(curr);
-				}, 100);
-			} else {
-				if (this.pipelines) {
-					this.pipelines.forEach(async (pipeline) => {
-						item = await pipeline.process_item(item, self, options, taiResponse);
-					});
-				}
-			}
+			self.processItem(item, self, options, taiResponse);
 		}
 	}
 }
