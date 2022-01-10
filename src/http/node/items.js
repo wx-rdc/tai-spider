@@ -28,6 +28,13 @@ class ItemNode {
 		return null;
 	}
 
+	child(nth) {
+		let nodes = this.$(this.node).children();
+		if (nodes && nodes.length > nth)
+			return new ItemNode(nodes[nth], this.$);
+		return null;
+	}
+
 	html() {
 		return this.$(this.node).html();
 	}
@@ -39,6 +46,7 @@ class ItemNode {
 
 class ItemNodes {
 	constructor(nodes, $) {
+		this.$ = $;
 		this.nodes = nodes.map((idx, item) => new ItemNode(item, $));
 	}
 
@@ -73,6 +81,16 @@ class ItemNodes {
 		let texts = [];
 		this.nodes.map((idx, node) => texts.push(node.extract()));
 		return texts;
+	}
+
+	extract_attr(prop) {
+		let attrs = [];
+		this.nodes.map((idx, node) => attrs.push(node.attr(prop)));
+		return attrs;
+	}
+
+	slice(startIdx, endIdx) {
+		return new ItemNodes(this.nodes.slice(startIdx, endIdx).map((idx, node) => node.node), this.$);
 	}
 
 }
