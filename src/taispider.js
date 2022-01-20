@@ -152,8 +152,8 @@ class TaiSpider extends EventEmitter {
 		var self = this;
 
 		switch (property) {
-		case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
-		default: break;
+			case 'rateLimit': self.limiters.key(limiter).setRateLimit(value); break;
+			default: break;
 		}
 	}
 
@@ -353,17 +353,17 @@ class TaiSpider extends EventEmitter {
 		}, 100);
 	}
 
-	processItem(item, self, options, taiResponse) {
+	async processItem(item, self, options, taiResponse) {
 		try {
 			if (item instanceof Request) {
-				self.processRequest(item, self);
+				await self.processRequest(item, self);
 			} else if (item instanceof SplashRequest) {
-				self.processSplashRequest(item, self);
+				await self.processSplashRequest(item, self);
 			} else {
 				if (self.pipelines) {
-					self.pipelines.forEach(async (pipeline) => {
+					for (let pipeline of self.pipelines) {
 						item = await pipeline.process_item(item, self, options, taiResponse);
-					});
+					}
 				}
 			}
 		} catch (error) {
@@ -371,27 +371,27 @@ class TaiSpider extends EventEmitter {
 		}
 	}
 
-	onContent(error, options, response) {
+	async onContent(error, options, response) {
 		var self = this;
 
 		if (error) {
 			switch (error.code) {
-			case 'NOHTTP2SUPPORT':
-				//if the enviroment is not support http2 api, all request rely on http2 protocol
-				//are aborted immediately no matter how many retry times left
-				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
-				break;
-			default:
-				log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
-				if (options.retries) {
-					setTimeout(function () {
-						options.retries--;
-						self._schedule(options);
-						options.release();
-					}, options.retryTimeout);
-					return;
-				}
-				break;
+				case 'NOHTTP2SUPPORT':
+					//if the enviroment is not support http2 api, all request rely on http2 protocol
+					//are aborted immediately no matter how many retry times left
+					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + ' skip all retry times');
+					break;
+				default:
+					log.error('Error ' + error + ' when fetching ' + (options.uri || options.url) + (options.retries ? ' (' + options.retries + ' retries left)' : ''));
+					if (options.retries) {
+						setTimeout(function () {
+							options.retries--;
+							self._schedule(options);
+							options.release();
+						}, options.retryTimeout);
+						return;
+					}
+					break;
 			}
 
 			options.callback(error, { options: options }, options.release);
@@ -411,7 +411,7 @@ class TaiSpider extends EventEmitter {
 		for (let v of options.callback(null, taiResponse, options.release)) {
 			// console.log(v);
 			let item = v;
-			self.processItem(item, self, options, taiResponse);
+			await self.processItem(item, self, options, taiResponse);
 		}
 	}
 }
