@@ -1,4 +1,5 @@
 const { program } = require('commander');
+const fs = require('fs');
 const path = require('path');
 const chalk = require('chalk');
 const requireDirectory = require('require-directory');
@@ -90,8 +91,14 @@ if (!pkgs.length) {
 const options = program.opts();
 if (options.output) debug('  output: %s', options.output);
 
-const defaultOptions = require(path.join(process.cwd(), 'config', 'default.js'))();
+let defaultOptions = require(path.join(process.cwd(), 'config', 'default.js'))();
 debug('Default options: ', defaultOptions);
+
+if (fs.existsSync(path.join(process.cwd(), 'config', 'setting.json'))) {
+	const settingOptions = require(path.join(process.cwd(), 'config', 'setting.json'));
+	debug('Setting options: ', settingOptions);
+	defaultOptions = Object.assign(defaultOptions, settingOptions);
+}
 
 var spiders = requireDirectory(module, path.join(process.cwd(), 'spider'));
 
@@ -109,6 +116,12 @@ pkgs.forEach(function (pkg) {
 		pipelines.push(require('./pipeline/store'));
 		pipelines.push(require('./pipeline/json'));
 		pipelines.push(require('./pipeline/echo'));
+
+		if (defaultOptions.ds) {
+			const dsName = defaultOptions.ds.split(':')[0];
+			console.log('load pipeline: ', dsName)
+			pipelines.push(require(path.join(process.cwd(), 'pipeline', dsName)));
+		}
 
 		let spider = new spiders[pkg](Object.assign({
 			debug: true,
