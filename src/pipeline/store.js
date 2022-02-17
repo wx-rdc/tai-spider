@@ -23,9 +23,10 @@ class StorePipeline {
 			const { filename = reqKey, type = 'dat' } = options;
 			let fullname = filename + '.' + type;
 			log.debug('write to ', fullname);
-			fs.createWriteStream(path.join(this.outputDir, fullname)).write(response.body);
+			let fullpath = path.resolve(this.outputDir, fullname);
+			fs.createWriteStream(fullpath).write(response.body);
 			if (options.cb)
-				item = Object.assign(item, options.cb(fullname));
+				item = Object.assign(item, options.cb(fullpath));
 			else {
 				item = Object.assign(item, {
 					file: {
@@ -33,7 +34,7 @@ class StorePipeline {
 						basename: filename,
 						type,
 						size: response.body.length,
-						fullpath: path.resolve(this.outputDir, fullname)
+						fullpath,
 					}
 				});
 			}

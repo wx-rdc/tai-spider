@@ -289,7 +289,7 @@ class TaiSpider extends EventEmitter {
 			log.error('max errors reached, exit with error!');
 			process.exit(1);
 		}
-		this.emit('_release');
+		// this.emit('_release');
 	}
 
 	clearErrors() {
@@ -302,15 +302,15 @@ class TaiSpider extends EventEmitter {
 			uri,
 			skipDuplicates,
 			request: item,
-			callback: function (err, res, done) {
+			callback: function (err, res) {
 				try {
-					done();
+					// done();
 					if (err) {
 						self.errorHandle(err);
 					} else {
 						self.clearErrors();
-						if (item.cb) return item.cb.bind(self)(res, self);
-						else return self.parse.bind(self)(res, self);
+						let cb = item.cb ? item.cb : self.parse;
+						return cb.bind(self)(res, self);
 					}
 				} catch (error) {
 					self.errorHandle(error);
@@ -333,9 +333,9 @@ class TaiSpider extends EventEmitter {
 			uri,
 			skipDuplicates,
 			request: item,
-			callback: function (err, res, done) {
+			callback: function (err, res) {
 				try {
-					done();
+					// done();
 					if (err) {
 						self.errorHandle(err);
 					} else {
@@ -397,9 +397,8 @@ class TaiSpider extends EventEmitter {
 					break;
 			}
 
-			options.callback(error, { options: options }, options.release);
-
-			return;
+			options.release();
+			return options.callback(error, { options: options });
 		}
 
 		if (!response.body) { response.body = ''; }
@@ -407,15 +406,22 @@ class TaiSpider extends EventEmitter {
 		log.debug('Got [' + options.reqKey + '] ' + (options.uri || 'html') + ' (' + response.body.length + ' bytes)...');
 
 		const taiResponse = createResponse(response, options);
-		if (options.method === 'HEAD' || !options.jQuery) {
-			return options.callback(null, taiResponse, options.release);
+		try {
+			if (options.method === 'HEAD' || !options.jQuery) {
+				return options.callback(null, taiResponse);
+			}
+
+			for (let v of options.callback(null, taiResponse)) {
+				// console.log(v);
+				let item = v;
+				await self.processItem(item, self, options, taiResponse);
+			}
+		} catch (error) {
+			log.error('parse error: ', taiResponse.getUri(), error)
+		} finally {
+			options.release();
 		}
 
-		for (let v of options.callback(null, taiResponse, options.release)) {
-			// console.log(v);
-			let item = v;
-			await self.processItem(item, self, options, taiResponse);
-		}
 	}
 }
 
