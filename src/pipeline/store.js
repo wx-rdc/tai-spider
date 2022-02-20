@@ -25,9 +25,10 @@ class StorePipeline {
 			log.debug('write to ', fullname);
 			let fullpath = path.resolve(this.outputDir, fullname);
 			fs.createWriteStream(fullpath).write(response.body);
-			if (options.cb)
+			if (options.cb) {
+				// callback to extend item
 				item = Object.assign(item, options.cb(fullpath));
-			else {
+			} else {
 				item = Object.assign(item, {
 					file: {
 						ref: response.options.uri,
